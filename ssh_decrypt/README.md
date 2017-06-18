@@ -181,7 +181,7 @@ We have three files:
 * `ssh.pcap`: The packet capture of the ssh session of interest
 
 * `ssh.core`: A coredump of the ssh process while the session is
-* running
+  running
 
 * `ssh`: The actual ssh binary used in the connection.  For
   simplicity, this is be compiled with debug symbols.
@@ -264,7 +264,12 @@ p active_state->state->send_context->cipher->name
 p active_state->state->receive_context->cipher->name
 ```
 
-### Using the keys to decrypt:
+We note that only the `active_state` struct is needed for this, so in
+the case where symbols are not present, our only worry is locating
+this struct, from which point we can follow the train of pointers
+contained therein to the data we seek.
+
+### Using the keys to decrypt
 
 If we are handed a pile of AES-CTR encrypted message and the key that
 was used to encrypt them, that is in general not enough to
