@@ -278,3 +278,97 @@ successfully decrypt: We also need the IV used to start the encryption
 
 In our case, we likewise need to understand the parameters involved in
 the chacha20 encryption algorithm.
+
+#### Intro to ChaCha20
+
+The ChaCha20 algorithm (along with the Poly1305 MAC function) is
+described in RFC 7539.  
+
+In brief, just like AES-CTR, ChaCha20 has a block encryption function,
+which is used to repeatedly encrypt an incrementing counter as the
+"message", and then this encrypted counter data is XORed with the
+plaintext to give the ciphertext.  Also, just like in AES-CTR, there
+is a nonce used to add some randomness so that when we start a new
+stream with a freshly zeroed counter and new nonce, we don't have the
+same output:
+
+```
+ChaCha20_block(key, counter, nonce)
+```
+
+This function constructs a 16-word (here, a word is considered as 32
+bits) state vector as:
+
+```
+0x61707865, 0x3320646e, 0x79622d32, 0x6b206574, {8 word key}, {1 word counter}, {3 word nonce}
+```
+
+(Note that these constants are the encoding of the magic string
+"expand 32-byte k".)  It then mangles this using mathematical
+operations and outputs the 64-byte result.
+
+This 64-byte state vector is the thing we extract from memory.  In
+particular, we have the key as words 4-11.  Words 0-3 are fixed as the
+constant, so now we simply need to understand what how the counter and
+IV are chosen.  This, of course, is application-specific, so we need
+to look at ChaCha20 is used in OpenSSH.
+
+#### ChaCha20 in OpenSSH
+
+The use of ChaCha20 in OpenSSH specifically is described in [this
+4-page draft
+RFC](https://tools.ietf.org/html/draft-josefsson-ssh-chacha20-poly1305-openssh-00).
+
+In brief, the payload length and the actual (padded) payload data are
+encrypted with separate instances of the cipher, so we need to know the keys, starting counters, and nonces used in these.
+
+* The keys are words 4-11 of the data we extracted from memory above.
+  For example, words 4-11 of
+  `active_state->state->send_context->cp_ctx->header_ctx->input` are
+  the key used to encrypt the lengths of sent payloads, and words 4-11
+  of `active_state->state->send_context->cp_ctx->main_ctx->input`
+  comprise the key use dto encrypt the data being sent.
+
+* The counter for encrypting the lengths always starts at 0, and the
+  counter for encrypting the data always starts at 1.
+
+* The nonce for encrypting a given length and payload is the same, and
+  is defined as the "packet sequence number" (which is separate from
+  the packet's TCP sequence number): The ith SSH packet sent has
+  sequence number i, and likewise the ith SSH packet received has
+  sequence numnber i (so we have two separate incrementing "sequence
+  number" counters--one for sent packets and one for received
+  packets--that give use the nonces to decrypt the packets in
+  question).
+
+#### Decrypting the data
+
+At this point, the long-overdue punchline is clear: We extract the
+keys from memory as words 4-11 of the structures we dumped earlier,
+keep track of the incrementing sequence numbers for sent and received
+packets, and then we have enough information to build the full state
+vectors for decrypting each packet:
+
+```
+{encoding of "expand 32-byte k"}{key extracted from memory}{1-word counter (0 for length, 1 for data)}{3-word packet sequence number}
+```
+
+For example, in Python with some functionality elided, we can decrypt
+all the transmitted data like (supposing txh and txd are the extracted
+state vectors for the length and data, respectively):
+
+```
+def dec(c, l, state, counter, iv):
+    state[12] = counter
+    state[15] = iv
+    return chacha20.decrypt_bytes(state,c,l)
+
+for i in range(len(tx_data)):
+    l = int.from_bytes(dec(tx_data[i]['encrypted_length'], 4, txh, 0, j),'big')
+    d = bytes(dec(tx_data[i]['encrypted_data'], l, txd, 1, j))
+    print(d)
+```
+
+An actual example of doing this is contained in `src/ssh_dec.py`, and a
+complete example script for decrypting an entire SSH session is found
+in `ssh_dec.sh`.

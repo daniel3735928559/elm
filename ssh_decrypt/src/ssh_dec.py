@@ -39,38 +39,84 @@ for x in [x.to_bytes(4, 'little') for x in rxd]: ctx_recv += x
 for x in [x.to_bytes(4, 'little') for x in rxh]: ctx_recv_len += x
 txiv = swap_ends(3)
 rxiv = swap_ends(3)
-for x in data:
-    if x['src'] == src_ip:
-        txd[12] = 1
-        txh[12] = 0
-        dli = 0xffffffff
-        rxiv = swap_ends(0)
-        j = 0
-        while(dli > 0xffff and j < 1000):
-            txh[15] = txiv
-            txd[15] = txiv
-            dl = chacha20.decrypt_bytes(txh,x['el'],4)
-            dli = int.from_bytes(dl,'big')
-            txiv = u32_add(txiv,1)
-            j += 1
-        txd[15] = swap_ends(5)#u32_add(txiv,1)
-        dd = bytes(chacha20.decrypt_bytes(txd,x['ed'],len(x['ed'])))
-        print("TX",txh,txiv)
-        print(dl)
-        print(dd)
-    else:
-        rxd[12] = 1
-        rxh[12] = 0
-        rxh[15] = rxiv
-        rxd[15] = rxiv
-        print("RX",rxh)
-        dl = chacha20.decrypt_bytes(rxh,x['el'],4)
-        dli = int.from_bytes(dl,'big')
-        dd = bytes(chacha20.decrypt_bytes(rxd,x['ed'],len(x['ed'])))
-        if dl[0] == 0:
-            rxiv = u32_add(rxiv,1)
-        print(dl)
-        print(dd)
-    print('--------------------')
 
-print(u32_add(67108864,4))
+def dec(c, l, state, counter, iv):
+    state[12] = counter
+    state[15] = iv
+    return chacha20.decrypt_bytes(state,c,l)
+
+i = 0
+for x in data:
+    print(i)
+    i += 1
+    if x['src'] == src_ip:
+        h_state = txh
+        d_state = txd
+        iv = txiv
+        dx = "TX"
+    else:
+        h_state = rxh
+        d_state = rxd
+        iv = rxiv
+        dx = "RX"
+        
+    l = 0xffffffff
+    j = 0
+    while l > 10*len(x['ed']) and j < 1000:
+        iv = swap_ends(j)
+        l = int.from_bytes(dec(x['el'], 4, h_state, 0, iv),'big')
+        j += 1
+    if j == 1000:
+        print(dx,"bad")
+        continue
+    
+    d = bytes(dec(x['ed'], l, d_state, 1, iv))
+    print(dx,'S',d_state,h_state)
+    print(dx,'IV',iv.to_bytes(4, 'little'))
+    print(dx,'L',l)
+    print(dx,'D',d)
+    
+    if x['src'] == src_ip:
+        txiv = u32_add(iv,1)
+    else:
+        rxiv = u32_add(iv,1)
+    
+        
+    #     l = int.from_bytes(dec(x['el'], 4, txh, 0, txiv),'big')
+    #     if l > 10*len(x['ed']):
+    #         ok = False
+    #         for j in range(1000):
+    #             txiv = swap_ends(j)
+    #             l = int.from_bytes(dec(x['el'], 4, txh, 0, txiv),'big')
+    #             if l < 10*len(x['el']):
+    #                ok = True
+    #                break
+    #         if not ok:
+    #             print("TX bad")
+    #             continue
+    #     d = bytes(dec(x['ed'], l, txd, 1, txiv))
+    #     print('TX S',txd,txh)
+    #     print('TX IV',txiv.to_bytes(4, 'little'))
+    #     print('TX L',l)
+    #     print('TX D',d)
+    #     txiv = u32_add(txiv,1)
+    # else:
+    #     l = int.from_bytes(dec(x['el'], 4, rxh, 0, rxiv),'big')
+    #     if l > 10*len(x['ed']):
+    #         ok = False
+    #         for j in range(1000):
+    #             rxiv = swap_ends(j)
+    #             l = int.from_bytes(dec(x['el'], 4, rxh, 0, rxiv),'big')
+    #             if l < 10*len(x['el']):
+    #                ok = True
+    #                break
+    #         if not ok:
+    #             print("RX bad")
+    #             continue
+    #     d = bytes(dec(x['ed'], l, rxd, 1, rxiv))
+    #     print('RX S',rxd,rxh)
+    #     print('RX IV',rxiv.to_bytes(4, 'little'))
+    #     print('RX L',l)
+    #     print('RX D',d)
+    #     rxiv = u32_add(rxiv,1)
+    #     print(u32_add(67108864,4))
