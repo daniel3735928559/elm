@@ -22,7 +22,7 @@ with open(sys.argv[2],"r") as f:
     s = f.read()
 txh,txd,rxh,rxd = [[int(x) for x in l.split(",") if len(x) > 0] for l in s.split("\n") if len(l) > 0]
 
-print("KEYS",txd,txh,rxd,rxh)
+#print("KEYS",txd,txh,rxd,rxh)
 
 txiv = 0
 rxiv = 0
@@ -45,10 +45,7 @@ def dec(c, l, state, counter, iv):
     state[15] = iv
     return chacha20.decrypt_bytes(state,c,l)
 
-i = 0
 for x in data:
-    print(i)
-    i += 1
     if x['src'] == src_ip:
         h_state = txh
         d_state = txd
@@ -71,10 +68,11 @@ for x in data:
         continue
     
     d = bytes(dec(x['ed'], l, d_state, 1, iv))
-    print(dx,'S',d_state,h_state)
-    print(dx,'IV',iv.to_bytes(4, 'little'))
-    print(dx,'L',l)
-    print(dx,'D',d)
+    #print(dx,'S',d_state,h_state)
+    #print(dx,'IV',iv.to_bytes(4, 'little'))
+    #print(dx,'L',l)
+    #print(dx,'D',d)
+    print(dx,d)
     
     if x['src'] == src_ip:
         txiv = u32_add(iv,1)
