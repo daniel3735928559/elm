@@ -261,8 +261,10 @@ The only of these that even might go wrong is `symbol_idx`, since it
 has to satisfy two inequalities, but these turn out to have a
 solution, so we're OK.
 
+## Exploitation
+
 So we pick arbitrary values for each of these variables satisfying the
-inequalities above and we're set: 
+inequalities above and we're set
 
 ```
 # Values from the binary: 
